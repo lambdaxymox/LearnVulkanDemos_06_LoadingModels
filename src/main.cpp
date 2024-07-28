@@ -2025,37 +2025,52 @@ class App {
         void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
             const VkCommandBuffer commandBuffer = this->beginSingleTimeCommands();
 
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = oldLayout;
-            barrier.newLayout = newLayout;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
+            const auto [srcAccessMask, dstAccessMask] = [oldLayout, newLayout]() -> std::tuple<VkAccessFlags, VkAccessFlags> {
+                if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                    return std::make_tuple(
+                        0, 
+                        VK_ACCESS_TRANSFER_WRITE_BIT
+                    );
+                } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                    return std::make_tuple(
+                        VK_ACCESS_TRANSFER_WRITE_BIT,
+                        VK_ACCESS_SHADER_READ_BIT
+                    );
+                } else {
+                    throw std::invalid_argument("unsupported layout transition!");
+                }
+            }();
+            const auto [sourceStage, destinationStage] = [oldLayout, newLayout]() -> std::tuple<VkPipelineStageFlags, VkPipelineStageFlags> {
+                if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                    return std::make_tuple(
+                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT
+                    );
+                } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                    return std::make_tuple(
+                        VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                    );
+                } else {
+                    throw std::invalid_argument("unsupported layout transition!");
+                }
+            }();
 
-            VkPipelineStageFlags sourceStage;
-            VkPipelineStageFlags destinationStage;
-
-            if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-                sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-                sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            } else {
-                throw std::invalid_argument("unsupported layout transition!");
-            }
+            const auto barrier = VkImageMemoryBarrier {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .oldLayout = oldLayout,
+                .newLayout = newLayout,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .subresourceRange.baseMipLevel = 0,
+                .subresourceRange.levelCount = 1,
+                .subresourceRange.baseArrayLayer = 0,
+                .subresourceRange.layerCount = 1,
+                .srcAccessMask = srcAccessMask,
+                .dstAccessMask = dstAccessMask,
+            };
 
             vkCmdPipelineBarrier(
                 commandBuffer,
@@ -2066,7 +2081,7 @@ class App {
                 1, &barrier
             );
 
-            endSingleTimeCommands(commandBuffer);
+            this->endSingleTimeCommands(commandBuffer);
         }
 
         void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
