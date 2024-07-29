@@ -88,6 +88,7 @@ add_executable(LearnVulkanDemos_06_LoadingModels)
 target_sources(LearnVulkanDemos_06_LoadingModels PRIVATE
     src/main.cpp
     src/engine.cpp
+    src/engine_impl_fmt.cpp
 )
 target_link_libraries(LearnVulkanDemos_06_LoadingModels PRIVATE Vulkan::Vulkan)
 target_link_libraries(LearnVulkanDemos_06_LoadingModels PRIVATE glfw)
